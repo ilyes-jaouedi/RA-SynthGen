@@ -26,7 +26,7 @@ sys.path.insert(0, _ROOT)
 from models.dit          import DiT, SpatialEncoder
 from models.bbox_encoder import BboxEncoder, NullBboxContext
 from models.psf_prior    import build_psf_x0, load_psf_kernel
-from data.dataset        import RADAR_SIZE, LOG_MIN, LOG_MAX, IMG_MEAN, IMG_STD
+from data.dataset        import RADAR_SIZE, LOG_MIN, LOG_MAX, IMG_MEAN, IMG_STD, ELEV_IDX, normalise_ra
 from training.config     import (
     CONTEXT_DIM, MAX_BBOXES, HIDDEN_DIM, NUM_LAYERS, NUM_HEADS,
     ODE_STEPS, ODE_METHOD, CFG_SCALE, DEVICE,
@@ -182,17 +182,18 @@ def generate(
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description="RA-SynthGen single-frame generation")
-    p.add_argument("--checkpoint", required=True,          help="Path to .pth checkpoint")
-    p.add_argument("--image",      required=True,          help="Path to camera image")
-    p.add_argument("--labels",     default=None,           help="Path to label txt (x y z dim_x dim_y dim_z theta)")
-    p.add_argument("--psf",        default="assets/radial_psf_analytic.npy")
-    p.add_argument("--out",        default="generated_ra.png")
-    p.add_argument("--method",     default="euler",        choices=["euler", "dopri5"])
-    p.add_argument("--steps",      type=int, default=ODE_STEPS)
+    p.add_argument("--checkpoint",  default="weights/ra_synthgen_s_best.pth", help="Path to .pth checkpoint")
+    p.add_argument("--image",       required=True,         help="Path to camera image")
+    p.add_argument("--labels",      default=None,          help="Path to label txt (x y z dim_x dim_y dim_z theta)")
+    p.add_argument("--psf",         default="assets/radial_psf_calibrated.npy")
+    p.add_argument("--radar-map",   default=None,          help="Optional: path to pre-extracted (512,751,11) .npy for GT panel")
+    p.add_argument("--out",         default="generated_ra.png")
+    p.add_argument("--method",      default="euler",       choices=["euler", "dopri5"])
+    p.add_argument("--steps",       type=int, default=ODE_STEPS)
     args = p.parse_args()
 
-    psf_kernel  = load_psf_kernel(args.psf)
-    image_t     = load_image(args.image)
+    psf_kernel   = load_psf_kernel(args.psf)
+    image_t      = load_image(args.image)
     bboxes, mask = load_labels_txt(args.labels, MAX_BBOXES)
 
     x1_hat = generate(
@@ -209,14 +210,45 @@ if __name__ == "__main__":
     ra_np = x1_hat[0, 0].cpu().numpy()  # (256, 256) in [-1, 1]
     ra_01 = (ra_np + 1) / 2             # [0, 1]
 
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
     img_bgr = cv2.imread(args.image)
     img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-    axes[0].imshow(img_rgb);            axes[0].set_title("Camera image")
-    axes[1].imshow(ra_01, cmap="jet", origin="lower", vmin=0, vmax=1)
-    axes[1].set_title("Generated RA map")
+    img_rgb = cv2.resize(img_rgb, (518, 266))
+
+    # load x0 PSF for display
+    real_boxes_np = bboxes[0][mask[0]].numpy()
+    x0_np = build_psf_x0(real_boxes_np, psf_kernel)[0].numpy()  # (256,256) [-1,1]
+    x0_01 = ((x0_np + 1) / 2).clip(0, 1)
+
+    # optionally load real GT RA map
+    gt_ra_01 = None
+    if args.radar_map is not None:
+        ra_raw = np.load(args.radar_map)         # (512, 751, 11)
+        ra2d   = ra_raw[:, :, ELEV_IDX]          # (512, 751)
+        ra2d   = cv2.resize(ra2d, (256, 256), interpolation=cv2.INTER_LINEAR)
+        gt_norm = normalise_ra(ra2d)             # [-1, 1]
+        gt_ra_01 = ((gt_norm + 1) / 2).clip(0, 1)
+
+    n_panels = 4 if gt_ra_01 is not None else 3
+    fig, axes = plt.subplots(1, n_panels, figsize=(6 * n_panels, 5))
+
+    axes[0].imshow(img_rgb)
+    axes[0].set_title("Camera image", fontsize=11)
+
+    axes[1].imshow(x0_01, cmap="inferno", origin="lower", vmin=0, vmax=1, aspect="auto")
+    axes[1].set_title("x0  PSF prior", fontsize=11)
     axes[1].set_xlabel("Azimuth bin"); axes[1].set_ylabel("Range bin")
-    for ax in axes: ax.axis("off")
+
+    axes[2].imshow(ra_01, cmap="jet", origin="lower", vmin=0, vmax=1, aspect="auto")
+    axes[2].set_title("Generated RA map", fontsize=11)
+    axes[2].set_xlabel("Azimuth bin")
+
+    if gt_ra_01 is not None:
+        axes[3].imshow(gt_ra_01, cmap="jet", origin="lower", vmin=0, vmax=1, aspect="auto")
+        axes[3].set_title("GT Bartlett RA", fontsize=11)
+        axes[3].set_xlabel("Azimuth bin")
+
+    for ax in axes:
+        ax.tick_params(labelsize=7)
     plt.tight_layout()
-    plt.savefig(args.out, dpi=150)
+    plt.savefig(args.out, dpi=150, bbox_inches="tight")
     print(f"Saved → {args.out}")

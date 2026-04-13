@@ -216,7 +216,7 @@ def train(args):
     start_epoch   = 0
 
     # ── Optional resume ────────────────────────────────────────────────────
-    ckpt_path = os.path.join(args.weights_dir, "ra_synthgen_last.pth")
+    ckpt_path = os.path.join(args.weights_dir, f"ra_synthgen_{C.MODEL_TAG}_last.pth")
     if os.path.exists(ckpt_path):
         print(f"Resuming from {ckpt_path}")
         ckpt = torch.load(ckpt_path, map_location=C.DEVICE)
@@ -341,7 +341,7 @@ def train(args):
 
         if avg_val < best_val_loss:
             best_val_loss = avg_val
-            best_path = os.path.join(args.weights_dir, "ra_synthgen_best.pth")
+            best_path = os.path.join(args.weights_dir, f"ra_synthgen_{C.MODEL_TAG}_best.pth")
             torch.save(ckpt, best_path)
             print(f"  ↳ New best model saved  (val {avg_val:.4f})")
 

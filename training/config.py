@@ -22,6 +22,12 @@ WEIGHTS_DIR   = os.path.join(_ROOT, "weights")
 VIZ_DIR       = os.path.join(_ROOT, "viz")
 
 # ── Model ──────────────────────────────────────────────────────────────────────
+# MODEL_TAG identifies this configuration; used in checkpoint filenames.
+# Change when scaling up so baseline weights are never overwritten:
+#   "s"  → 384 hidden / 6 layers / 6 heads  (23 M params, baseline)
+#   "m"  → 512 hidden / 8 layers / 8 heads  (~50 M params)
+MODEL_TAG    = "s"
+
 RADAR_SIZE   = 256
 PATCH_SIZE   = 16
 HIDDEN_DIM   = 384
