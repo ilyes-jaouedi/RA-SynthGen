@@ -279,17 +279,3 @@ Edit `training/config.py`:
 | No TCR regularisation | `LAMBDA_TCR = 0.0` |
 | Larger model | `HIDDEN_DIM = 512`, `NUM_LAYERS = 8`, `NUM_HEADS = 8` |
 
----
-
-## Relation to On-RADIal
-
-This project is an independent spinout from [`On-RADIal/Project_RA_Gen_CFM`](https://github.com/Jaouedi/On-RADIal).
-
-| Feature | Project_RA_Gen_CFM | RA-SynthGen |
-|---|---|---|
-| Image encoder | CLIP ViT-L/14 | **DINOv2 ViT-L/14** |
-| Conditioning | Camera image only | Camera image + **3D bbox tokens** |
-| x0 prior | YOLO 2D ray | **Calibrated PSF blobs at 3D detections** |
-| Attention bias | Geometry soft mask | Geometry mask + **per-bbox Gaussian bias** |
-| Ground truth | CMF-processed maps | Bartlett FFT maps (direct from ADC) |
-| Purpose | Radar map generation | **Data augmentation** |
